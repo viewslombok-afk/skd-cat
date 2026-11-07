@@ -1,0 +1,9 @@
+{
+  "name": "skd-cat",
+  "main": "worker.js",
+  "compatibility_date": "2025-01-01",
+  "assets": { "directory": "./", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "skd-db", "database_id": "4aadeb58-9d37-4268-a24b-48342d7932f0" }
+  ]
+}
