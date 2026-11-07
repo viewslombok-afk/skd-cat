@@ -1,3 +1,4 @@
+const TM={"TWK": ["Implementasi Pancasila", "Implementasi UUD 1945", "Nasionalisme", "Pilar NKRI", "Integritas", "Bela Negara", "Gagasan Utama", "Kalimat Efektif"], "TIU": ["Pecahan dan Desimal", "Hubungan X dan Y", "Analogi Kata dan Kalimat", "Pola Kalimat", "Silogisme", "Pola Bilangan", "Perbandingan Senilai dan Tak Senilai", "Figural 9 Kotak", "Figural", "Penalaran Analitis", "Tabel", "Kecukupan Data", "Hitung Cepat Kesetaraan Perkalian"], "TKP": ["Pelayanan Publik", "Profesionalisme", "Jejaring Kerja", "Teknologi Informasi dan Komunikasi", "Sosial Budaya", "Anti Radikalisme"]};
 const enc=new TextEncoder(),FULL={TWK:150,TIU:175,TKP:225},PG={TWK:65,TIU:80,TKP:156},QN={TWK:30,TIU:35,TKP:45};
 const b64=b=>btoa(String.fromCharCode(...new Uint8Array(b))),ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 const J=(o,s=200)=>new Response(JSON.stringify(o),{status:s,headers:{'content-type':'application/json'}});
@@ -26,10 +27,12 @@ export default{async fetch(req,env){const u=new URL(req.url),p=u.pathname;if(!p.
  if(p.startsWith('/api/admin/')){if(me.r!='a')return E('Ditolak.',403);
   if(p=='/api/admin/stats'){const r=await DB.prepare('SELECT cat,COUNT(*) n FROM questions GROUP BY cat').all();return J({c:r.results})}
   if(p=='/api/admin/questions'){const c=u.searchParams.get('cat'),r=await DB.prepare('SELECT id,cat,theme,text FROM questions WHERE cat=? ORDER BY id DESC LIMIT 300').bind(c).all();return J({rows:r.results})}
+  if(p=='/api/admin/settheme'){await DB.prepare('UPDATE questions SET theme=? WHERE id=?').bind(body.theme,body.id).run();return J({ok:1})}
   if(p=='/api/admin/delq'){await DB.prepare('DELETE FROM questions WHERE id=?').bind(body.id).run();return J({ok:1})}
   if(p=='/api/admin/import'){const qs=Array.isArray(body.qs)?body.qs:[],rows=qs.map(clean),bad=rows.findIndex(x=>!x);if(bad>=0)return E('Soal nomor '+(bad+1)+' tidak valid (cek cat, 5 opsi, answer 0-4 atau weights 5 angka 1-5). Tidak ada yang disimpan.');
    const st=rows.map(r=>DB.prepare('INSERT INTO questions(cat,theme,text,options,answer,weights,explain,trick) VALUES(?,?,?,?,?,?,?,?)').bind(...r));
-   if(body.mode=='replace')await DB.prepare('DELETE FROM questions').run();for(let i=0;i<st.length;i+=40)await DB.batch(st.slice(i,i+40));return J({n:rows.length})}
+   if(body.mode=='replace')await DB.prepare('DELETE FROM questions').run();for(let i=0;i<st.length;i+=40)await DB.batch(st.slice(i,i+40));const asing=[...new Set(rows.filter(r=>r[1]&&!TM[r[0]].includes(r[1])).map(r=>r[0]+': '+r[1]))];return J({n:rows.length,asing})}
+  if(p=='/api/admin/results'){const r=await DB.prepare('SELECT * FROM results WHERE username=? ORDER BY id DESC LIMIT 50').bind(u.searchParams.get('u')).all();return J({rows:r.results})}
   if(p=='/api/admin/users'){const r=await DB.prepare('SELECT u.username,u.status,u.last_login,COUNT(r.id) n,MAX(r.total) best FROM users u LEFT JOIN results r ON r.username=u.username GROUP BY u.username').all();return J({rows:r.results})}
   if(p=='/api/admin/user'){if(body.del){await DB.prepare('DELETE FROM users WHERE username=?').bind(body.u).run();await DB.prepare('DELETE FROM results WHERE username=?').bind(body.u).run()}else await DB.prepare('UPDATE users SET status=? WHERE username=?').bind(body.st,body.u).run();return J({ok:1})}
   return E('Tidak ditemukan.',404)}
@@ -39,11 +42,14 @@ export default{async fetch(req,env){const u=new URL(req.url),p=u.pathname;if(!p.
  if(p=='/api/ranking'){const r=await DB.prepare('SELECT username,MAX(total) best,COUNT(*) n FROM results GROUP BY username ORDER BY best DESC LIMIT 50').all();return J({rows:r.results})}
  if(p=='/api/exam'){const qs=[];for(const c of['TWK','TIU','TKP']){const r=await DB.prepare('SELECT id,cat,theme,text,options FROM questions WHERE cat=? AND active=1 ORDER BY RANDOM() LIMIT ?').bind(c,QN[c]).all();r.results.forEach(x=>qs.push({id:x.id,c:x.cat,tm:x.theme,t:x.text,o:JSON.parse(x.options)}))}return J({qs})}
  if(p=='/api/submit'){const ans=Array.isArray(body.ans)?body.ans:[];if(!ans.length)return E('Data kosong.');const ids=ans.map(a=>Number(a.id)).filter(Number.isInteger).slice(0,200);
-  const r=await DB.prepare(`SELECT * FROM questions WHERE id IN (${ids.map(()=>'?').join(',')})`).bind(...ids).all(),M={};r.results.forEach(x=>M[x.id]=x);
+  const M={};for(let i=0;i<ids.length;i+=80){const part=ids.slice(i,i+80),r=await DB.prepare(`SELECT * FROM questions WHERE id IN (${part.map(()=>'?').join(',')})`).bind(...part).all();r.results.forEach(x=>M[x.id]=x)}
   const s={TWK:0,TIU:0,TKP:0},n={TWK:0,TIU:0,TKP:0},rev=[];
   for(const a of ans){const q=M[a.id];if(!q)continue;const w=q.weights?JSON.parse(q.weights):null;n[q.cat]+=5;
    if(a.a!=null&&a.a>=0&&a.a<=4)s[q.cat]+=q.cat=='TKP'?w[a.a]:(a.a==q.answer?5:0);rev.push({id:q.id,k:q.answer,w,p:q.explain,tr:q.trick})}
   const f=c=>n[c]?Math.round(s[c]/n[c]*FULL[c]):0,tw=f('TWK'),ti=f('TIU'),tk=f('TKP'),ok=tw>=PG.TWK&&ti>=PG.TIU&&tk>=PG.TKP,d=new Date().toLocaleString('id-ID',{timeZone:'Asia/Makassar'}),dur=String(body.dur||'').slice(0,8);
   await DB.prepare('INSERT INTO results(username,twk,tiu,tkp,total,passed,duration,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(me.u,tw,ti,tk,tw+ti+tk,ok?1:0,dur,d).run();
   return J({h:{d,tw,ti,tk,tot:tw+ti+tk,ok,dur},rev})}
+ if(p=='/api/themes'){const r=await DB.prepare('SELECT cat,theme,COUNT(*) n FROM questions WHERE active=1 GROUP BY cat,theme ORDER BY cat,theme').all();return J({rows:r.results})}
+ if(p=='/api/practice'){const c=u.searchParams.get('cat'),t=u.searchParams.get('theme');let q='SELECT id,cat,theme,text,options FROM questions WHERE active=1 AND cat=?';const a=[c];if(t){q+=' AND theme=?';a.push(t)}const r=await DB.prepare(q+' ORDER BY RANDOM() LIMIT 20').bind(...a).all();return J({qs:r.results.map(x=>({id:x.id,c:x.cat,tm:x.theme,t:x.text,o:JSON.parse(x.options)}))})}
+ if(p=='/api/check'){const q=await DB.prepare('SELECT * FROM questions WHERE id=?').bind(body.id).first();if(!q)return E('Soal tidak ada.',404);const w=q.weights?JSON.parse(q.weights):null,a=Number(body.a);return J({k:q.answer,w,p:q.explain,tr:q.trick,pt:q.cat=='TKP'?w[a]:(a==q.answer?5:0)})}
  return E('Tidak ditemukan.',404)}catch(x){return E('Kesalahan server: '+x.message,500)}}}
