@@ -10,9 +10,14 @@ async function pbk(pw,salt){const k=await crypto.subtle.importKey('raw',enc.enco
 const okName=u=>/^[a-z0-9_.-]{3,20}$/.test(u);
 function clean(q){if(!q||!['TWK','TIU','TKP'].includes(q.cat)||typeof q.text!='string'||!q.text.trim())return null;const o=q.options;if(!Array.isArray(o)||o.length!=5)return null;
  let a=null,w=null;if(q.cat=='TKP'){w=q.weights;if(!Array.isArray(w)||w.length!=5||w.some(x=>!(x>=1&&x<=5)))return null}else{a=Number(q.answer);if(!(a>=0&&a<=4))return null}
- return[q.cat,q.theme||'',q.text.trim(),JSON.stringify(o.map(String)),a,w?JSON.stringify(w):null,q.explain||'',q.trick||'']}
+ return[q.cat,q.theme||'',nm(q.text.trim()),nm(JSON.stringify(o.map(String))),a,w?JSON.stringify(w):null,nm(q.explain||''),nm(q.trick||'')]}
+/* Nama "Citra" (huruf besar di awal, kata utuh) diganti "Luluk". Kata biasa "citra" (huruf kecil) dibiarkan. */
+const nm=s=>typeof s=='string'?s.replace(/\bCitra\b/g,'Luluk').replace(/\bCITRA\b/g,'LULUK'):s,nj=s=>JSON.parse(nm(s));
 let MIG=0;
-async function ensure(DB){if(MIG)return;try{const c=await DB.prepare('PRAGMA table_info(results)').all();if(!c.results.some(x=>x.name=='review'))await DB.prepare('ALTER TABLE results ADD COLUMN review TEXT').run();MIG=1}catch(x){}}
+async function ensure(DB){if(MIG)return;try{const c=await DB.prepare('PRAGMA table_info(results)').all();if(!c.results.some(x=>x.name=='review'))await DB.prepare('ALTER TABLE results ADD COLUMN review TEXT').run();MIG=1}catch(x){}
+ try{const fx=c=>`REPLACE(REPLACE(${c},'Citra','Luluk'),'CITRA','LULUK')`,g=c=>`${c} GLOB '*Citra*' OR ${c} GLOB '*CITRA*'`;
+  await DB.prepare(`UPDATE questions SET text=${fx('text')},options=${fx('options')},explain=${fx('explain')},trick=${fx('trick')} WHERE ${['text','options','explain','trick'].map(g).join(' OR ')}`).run();
+  await DB.prepare(`UPDATE results SET review=${fx('review')} WHERE ${g('review')}`).run()}catch(x){}}
 export default{async fetch(req,env){const u=new URL(req.url),p=u.pathname;if(!p.startsWith('/api/'))return env.ASSETS.fetch(req);
  if(!env.ADMIN_PASSWORD||!env.DB)return E('Server belum dikonfigurasi (ADMIN_PASSWORD / DB).',500);
  const body=req.method=='POST'?await req.json().catch(()=>({})):{},DB=env.DB;await ensure(DB);
@@ -42,21 +47,21 @@ export default{async fetch(req,env){const u=new URL(req.url),p=u.pathname;if(!p.
  const us=await DB.prepare('SELECT status FROM users WHERE username=?').bind(me.u).first();if(!us||us.status!='ok')return E('Akun tidak aktif.',403);
  if(p=='/api/me'){const r=await DB.prepare('SELECT id,twk,tiu,tkp,total,passed,duration,created_at FROM results WHERE username=? ORDER BY id').bind(me.u).all();return J({u:me.u,hist:r.results.map(x=>({id:x.id,d:x.created_at,tw:x.twk,ti:x.tiu,tk:x.tkp,tot:x.total,ok:!!x.passed,dur:x.duration}))})}
  if(p=='/api/ranking'){const r=await DB.prepare('SELECT username,MAX(total) best,COUNT(*) n FROM results GROUP BY username ORDER BY best DESC LIMIT 50').all();return J({rows:r.results})}
- if(p=='/api/exam'){const qs=[];for(const c of['TWK','TIU','TKP']){let rs;if(c=='TIU'){const MN={'Silogisme':2,'Penalaran Analitis':2,'Analogi Kata dan Kalimat':2,'Figural':3,'Kecukupan Data':3},got=[];for(const[t,n]of Object.entries(MN)){const g=await DB.prepare('SELECT id,cat,theme,text,options FROM questions WHERE cat=? AND active=1 AND theme=? ORDER BY RANDOM() LIMIT ?').bind(c,t,n).all();got.push(...g.results)}const ids=got.map(x=>x.id),m=await DB.prepare('SELECT id,cat,theme,text,options FROM questions WHERE cat=? AND active=1'+(ids.length?' AND id NOT IN ('+ids.map(()=>'?').join(',')+')':'')+' ORDER BY RANDOM() LIMIT ?').bind(c,...ids,QN[c]-ids.length).all();rs=[...got,...m.results].sort(()=>Math.random()-.5)}else rs=(await DB.prepare('SELECT id,cat,theme,text,options FROM questions WHERE cat=? AND active=1 ORDER BY RANDOM() LIMIT ?').bind(c,QN[c]).all()).results;rs.forEach(x=>qs.push({id:x.id,c:x.cat,tm:x.theme,t:x.text,o:JSON.parse(x.options)}))}return J({qs})}
+ if(p=='/api/exam'){const qs=[];for(const c of['TWK','TIU','TKP']){let rs;if(c=='TIU'){const MN={'Silogisme':2,'Penalaran Analitis':2,'Analogi Kata dan Kalimat':2,'Figural':3,'Kecukupan Data':3},got=[];for(const[t,n]of Object.entries(MN)){const g=await DB.prepare('SELECT id,cat,theme,text,options FROM questions WHERE cat=? AND active=1 AND theme=? ORDER BY RANDOM() LIMIT ?').bind(c,t,n).all();got.push(...g.results)}const ids=got.map(x=>x.id),m=await DB.prepare('SELECT id,cat,theme,text,options FROM questions WHERE cat=? AND active=1'+(ids.length?' AND id NOT IN ('+ids.map(()=>'?').join(',')+')':'')+' ORDER BY RANDOM() LIMIT ?').bind(c,...ids,QN[c]-ids.length).all();rs=[...got,...m.results].sort(()=>Math.random()-.5)}else rs=(await DB.prepare('SELECT id,cat,theme,text,options FROM questions WHERE cat=? AND active=1 ORDER BY RANDOM() LIMIT ?').bind(c,QN[c]).all()).results;rs.forEach(x=>qs.push({id:x.id,c:x.cat,tm:x.theme,t:nm(x.text),o:nj(x.options)}))}return J({qs})}
  if(p=='/api/submit'){const ans=Array.isArray(body.ans)?body.ans:[];if(!ans.length)return E('Data kosong.');const ids=ans.map(a=>Number(a.id)).filter(Number.isInteger).slice(0,200);
   const M={};for(let i=0;i<ids.length;i+=80){const part=ids.slice(i,i+80),r=await DB.prepare(`SELECT * FROM questions WHERE id IN (${part.map(()=>'?').join(',')})`).bind(...part).all();r.results.forEach(x=>M[x.id]=x)}
   const s={TWK:0,TIU:0,TKP:0},n={TWK:0,TIU:0,TKP:0},rev=[],snq=[],sna=[];
   for(const a of ans){const q=M[a.id];if(!q)continue;const w=q.weights?JSON.parse(q.weights):null;n[q.cat]+=5;const given=a.a!=null&&a.a>=0&&a.a<=4;
-   if(given)s[q.cat]+=q.cat=='TKP'?w[a.a]:(a.a==q.answer?5:0);rev.push({id:q.id,k:q.answer,w,p:q.explain,tr:q.trick});
-   snq.push({id:q.id,c:q.cat,tm:q.theme,t:q.text,o:JSON.parse(q.options)});sna.push(given?Number(a.a):null)}
+   if(given)s[q.cat]+=q.cat=='TKP'?w[a.a]:(a.a==q.answer?5:0);rev.push({id:q.id,k:q.answer,w,p:nm(q.explain),tr:nm(q.trick)});
+   snq.push({id:q.id,c:q.cat,tm:q.theme,t:nm(q.text),o:nj(q.options)});sna.push(given?Number(a.a):null)}
   const f=c=>n[c]?Math.round(s[c]/n[c]*FULL[c]):0,tw=f('TWK'),ti=f('TIU'),tk=f('TKP'),ok=tw>=PG.TWK&&ti>=PG.TIU&&tk>=PG.TKP,d=new Date().toLocaleString('id-ID',{timeZone:'Asia/Makassar'}),dur=String(body.dur||'').slice(0,8);
   const ins=await DB.prepare('INSERT INTO results(username,twk,tiu,tkp,total,passed,duration,created_at,review) VALUES(?,?,?,?,?,?,?,?,?)').bind(me.u,tw,ti,tk,tw+ti+tk,ok?1:0,dur,d,JSON.stringify({qs:snq,a:sna,rev})).run();
   return J({h:{id:ins.meta&&ins.meta.last_row_id,d,tw,ti,tk,tot:tw+ti+tk,ok,dur},rev})}
  if(p=='/api/review'){const id=u.searchParams.get('id');
   const r=id?await DB.prepare('SELECT * FROM results WHERE id=? AND username=?').bind(Number(id),me.u).first():await DB.prepare('SELECT * FROM results WHERE username=? AND review IS NOT NULL ORDER BY id DESC LIMIT 1').bind(me.u).first();
   if(!r)return E('Belum ada ujian.',404);if(!r.review)return E('Pembahasan ujian ini tidak tersimpan (dikerjakan sebelum fitur ini ada).',404);
-  const v=JSON.parse(r.review);return J({h:{id:r.id,d:r.created_at,tw:r.twk,ti:r.tiu,tk:r.tkp,tot:r.total,ok:!!r.passed,dur:r.duration},qs:v.qs,a:v.a,rev:v.rev})}
+  const v=nj(r.review);return J({h:{id:r.id,d:r.created_at,tw:r.twk,ti:r.tiu,tk:r.tkp,tot:r.total,ok:!!r.passed,dur:r.duration},qs:v.qs,a:v.a,rev:v.rev})}
  if(p=='/api/themes'){const r=await DB.prepare('SELECT cat,theme,COUNT(*) n FROM questions WHERE active=1 GROUP BY cat,theme ORDER BY cat,theme').all();return J({rows:r.results})}
- if(p=='/api/practice'){const c=u.searchParams.get('cat'),t=u.searchParams.get('theme');let q='SELECT id,cat,theme,text,options FROM questions WHERE active=1 AND cat=?';const a=[c];if(t){q+=' AND theme=?';a.push(t)}const r=await DB.prepare(q+' ORDER BY RANDOM() LIMIT 20').bind(...a).all();return J({qs:r.results.map(x=>({id:x.id,c:x.cat,tm:x.theme,t:x.text,o:JSON.parse(x.options)}))})}
- if(p=='/api/check'){const q=await DB.prepare('SELECT * FROM questions WHERE id=?').bind(body.id).first();if(!q)return E('Soal tidak ada.',404);const w=q.weights?JSON.parse(q.weights):null,a=Number(body.a);return J({k:q.answer,w,p:q.explain,tr:q.trick,pt:q.cat=='TKP'?w[a]:(a==q.answer?5:0)})}
+ if(p=='/api/practice'){const c=u.searchParams.get('cat'),t=u.searchParams.get('theme');let q='SELECT id,cat,theme,text,options FROM questions WHERE active=1 AND cat=?';const a=[c];if(t){q+=' AND theme=?';a.push(t)}const r=await DB.prepare(q+' ORDER BY RANDOM() LIMIT 20').bind(...a).all();return J({qs:r.results.map(x=>({id:x.id,c:x.cat,tm:x.theme,t:nm(x.text),o:nj(x.options)}))})}
+ if(p=='/api/check'){const q=await DB.prepare('SELECT * FROM questions WHERE id=?').bind(body.id).first();if(!q)return E('Soal tidak ada.',404);const w=q.weights?JSON.parse(q.weights):null,a=Number(body.a);return J({k:q.answer,w,p:nm(q.explain),tr:nm(q.trick),pt:q.cat=='TKP'?w[a]:(a==q.answer?5:0)})}
  return E('Tidak ditemukan.',404)}catch(x){return E('Kesalahan server: '+x.message,500)}}}
