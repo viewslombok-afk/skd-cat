@@ -1,0 +1,49 @@
+const enc=new TextEncoder(),FULL={TWK:150,TIU:175,TKP:225},PG={TWK:65,TIU:80,TKP:156},QN={TWK:30,TIU:35,TKP:45};
+const b64=b=>btoa(String.fromCharCode(...new Uint8Array(b))),ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const J=(o,s=200)=>new Response(JSON.stringify(o),{status:s,headers:{'content-type':'application/json'}});
+const E=(m,s=400)=>J({error:m},s);
+async function hmac(k,d){const key=await crypto.subtle.importKey('raw',enc.encode(k),{name:'HMAC',hash:'SHA-256'},false,['sign']);return b64(await crypto.subtle.sign('HMAC',key,enc.encode(d)))}
+const sign=async(env,o)=>{const p=btoa(JSON.stringify(o));return p+'.'+await hmac(env.ADMIN_PASSWORD,p)};
+async function verify(env,req){const t=(req.headers.get('authorization')||'').slice(7),[p,s]=t.split('.');if(!p||!s||s!==await hmac(env.ADMIN_PASSWORD,p))return null;try{const o=JSON.parse(atob(p));return o.e>Date.now()?o:null}catch(x){return null}}
+async function pbk(pw,salt){const k=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveBits']);return b64(await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'},k,256))}
+const okName=u=>/^[a-z0-9_.-]{3,20}$/.test(u);
+function clean(q){if(!q||!['TWK','TIU','TKP'].includes(q.cat)||typeof q.text!='string'||!q.text.trim())return null;const o=q.options;if(!Array.isArray(o)||o.length!=5)return null;
+ let a=null,w=null;if(q.cat=='TKP'){w=q.weights;if(!Array.isArray(w)||w.length!=5||w.some(x=>!(x>=1&&x<=5)))return null}else{a=Number(q.answer);if(!(a>=0&&a<=4))return null}
+ return[q.cat,q.theme||'',q.text.trim(),JSON.stringify(o.map(String)),a,w?JSON.stringify(w):null,q.explain||'',q.trick||'']}
+export default{async fetch(req,env){const u=new URL(req.url),p=u.pathname;if(!p.startsWith('/api/'))return env.ASSETS.fetch(req);
+ if(!env.ADMIN_PASSWORD||!env.DB)return E('Server belum dikonfigurasi (ADMIN_PASSWORD / DB).',500);
+ const body=req.method=='POST'?await req.json().catch(()=>({})):{},DB=env.DB;
+ try{
+ if(p=='/api/register'){const n=String(body.u||'').toLowerCase();if(!okName(n)||String(body.p||'').length<4)return E('Username 3-20 huruf kecil/angka/._- dan password min. 4 karakter.');
+  if(await DB.prepare('SELECT 1 FROM users WHERE username=?').bind(n).first())return E('Username sudah dipakai.');
+  const s=crypto.getRandomValues(new Uint8Array(16));await DB.prepare('INSERT INTO users(username,pass_hash,status,last_login) VALUES(?,?,?,?)').bind(n,b64(s)+':'+await pbk(body.p,s),'ok',new Date().toISOString()).run();
+  return J({token:await sign(env,{u:n,r:'u',e:Date.now()+30*864e5}),u:n})}
+ if(p=='/api/login'){const n=String(body.u||'').toLowerCase(),r=await DB.prepare('SELECT * FROM users WHERE username=?').bind(n).first();if(!r)return E('Username atau password salah.',401);
+  const[s,h]=r.pass_hash.split(':');if(await pbk(String(body.p||''),ub64(s))!==h)return E('Username atau password salah.',401);if(r.status!='ok')return E('Akun diblokir atau menunggu persetujuan pemilik.',403);
+  await DB.prepare('UPDATE users SET last_login=? WHERE username=?').bind(new Date().toISOString(),n).run();return J({token:await sign(env,{u:n,r:'u',e:Date.now()+30*864e5}),u:n})}
+ if(p=='/api/admin/login'){if(body.p!==env.ADMIN_PASSWORD)return E('Password salah.',401);return J({token:await sign(env,{r:'a',e:Date.now()+12*36e5})})}
+ const me=await verify(env,req);if(!me)return E('Sesi habis, silakan masuk lagi.',401);
+ if(p.startsWith('/api/admin/')){if(me.r!='a')return E('Ditolak.',403);
+  if(p=='/api/admin/stats'){const r=await DB.prepare('SELECT cat,COUNT(*) n FROM questions GROUP BY cat').all();return J({c:r.results})}
+  if(p=='/api/admin/questions'){const c=u.searchParams.get('cat'),r=await DB.prepare('SELECT id,cat,theme,text FROM questions WHERE cat=? ORDER BY id DESC LIMIT 300').bind(c).all();return J({rows:r.results})}
+  if(p=='/api/admin/delq'){await DB.prepare('DELETE FROM questions WHERE id=?').bind(body.id).run();return J({ok:1})}
+  if(p=='/api/admin/import'){const qs=Array.isArray(body.qs)?body.qs:[],rows=qs.map(clean),bad=rows.findIndex(x=>!x);if(bad>=0)return E('Soal nomor '+(bad+1)+' tidak valid (cek cat, 5 opsi, answer 0-4 atau weights 5 angka 1-5). Tidak ada yang disimpan.');
+   const st=rows.map(r=>DB.prepare('INSERT INTO questions(cat,theme,text,options,answer,weights,explain,trick) VALUES(?,?,?,?,?,?,?,?)').bind(...r));
+   if(body.mode=='replace')await DB.prepare('DELETE FROM questions').run();for(let i=0;i<st.length;i+=40)await DB.batch(st.slice(i,i+40));return J({n:rows.length})}
+  if(p=='/api/admin/users'){const r=await DB.prepare('SELECT u.username,u.status,u.last_login,COUNT(r.id) n,MAX(r.total) best FROM users u LEFT JOIN results r ON r.username=u.username GROUP BY u.username').all();return J({rows:r.results})}
+  if(p=='/api/admin/user'){if(body.del){await DB.prepare('DELETE FROM users WHERE username=?').bind(body.u).run();await DB.prepare('DELETE FROM results WHERE username=?').bind(body.u).run()}else await DB.prepare('UPDATE users SET status=? WHERE username=?').bind(body.st,body.u).run();return J({ok:1})}
+  return E('Tidak ditemukan.',404)}
+ if(me.r!='u')return E('Ditolak.',403);
+ const us=await DB.prepare('SELECT status FROM users WHERE username=?').bind(me.u).first();if(!us||us.status!='ok')return E('Akun tidak aktif.',403);
+ if(p=='/api/me'){const r=await DB.prepare('SELECT * FROM results WHERE username=? ORDER BY id').bind(me.u).all();return J({u:me.u,hist:r.results.map(x=>({d:x.created_at,tw:x.twk,ti:x.tiu,tk:x.tkp,tot:x.total,ok:!!x.passed,dur:x.duration}))})}
+ if(p=='/api/ranking'){const r=await DB.prepare('SELECT username,MAX(total) best,COUNT(*) n FROM results GROUP BY username ORDER BY best DESC LIMIT 50').all();return J({rows:r.results})}
+ if(p=='/api/exam'){const qs=[];for(const c of['TWK','TIU','TKP']){const r=await DB.prepare('SELECT id,cat,theme,text,options FROM questions WHERE cat=? AND active=1 ORDER BY RANDOM() LIMIT ?').bind(c,QN[c]).all();r.results.forEach(x=>qs.push({id:x.id,c:x.cat,tm:x.theme,t:x.text,o:JSON.parse(x.options)}))}return J({qs})}
+ if(p=='/api/submit'){const ans=Array.isArray(body.ans)?body.ans:[];if(!ans.length)return E('Data kosong.');const ids=ans.map(a=>Number(a.id)).filter(Number.isInteger).slice(0,200);
+  const r=await DB.prepare(`SELECT * FROM questions WHERE id IN (${ids.map(()=>'?').join(',')})`).bind(...ids).all(),M={};r.results.forEach(x=>M[x.id]=x);
+  const s={TWK:0,TIU:0,TKP:0},n={TWK:0,TIU:0,TKP:0},rev=[];
+  for(const a of ans){const q=M[a.id];if(!q)continue;const w=q.weights?JSON.parse(q.weights):null;n[q.cat]+=5;
+   if(a.a!=null&&a.a>=0&&a.a<=4)s[q.cat]+=q.cat=='TKP'?w[a.a]:(a.a==q.answer?5:0);rev.push({id:q.id,k:q.answer,w,p:q.explain,tr:q.trick})}
+  const f=c=>n[c]?Math.round(s[c]/n[c]*FULL[c]):0,tw=f('TWK'),ti=f('TIU'),tk=f('TKP'),ok=tw>=PG.TWK&&ti>=PG.TIU&&tk>=PG.TKP,d=new Date().toLocaleString('id-ID',{timeZone:'Asia/Makassar'}),dur=String(body.dur||'').slice(0,8);
+  await DB.prepare('INSERT INTO results(username,twk,tiu,tkp,total,passed,duration,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(me.u,tw,ti,tk,tw+ti+tk,ok?1:0,dur,d).run();
+  return J({h:{d,tw,ti,tk,tot:tw+ti+tk,ok,dur},rev})}
+ return E('Tidak ditemukan.',404)}catch(x){return E('Kesalahan server: '+x.message,500)}}}
