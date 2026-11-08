@@ -34,6 +34,7 @@ export default{async fetch(req,env){const u=new URL(req.url),p=u.pathname;if(!p.
  if(p.startsWith('/api/admin/')){if(me.r!='a')return E('Ditolak.',403);
   if(p=='/api/admin/stats'){const r=await DB.prepare('SELECT cat,COUNT(*) n FROM questions GROUP BY cat').all();return J({c:r.results})}
   if(p=='/api/admin/questions'){const c=u.searchParams.get('cat'),r=await DB.prepare('SELECT id,cat,theme,text FROM questions WHERE cat=? ORDER BY id DESC LIMIT 300').bind(c).all();return J({rows:r.results})}
+  if(p=='/api/admin/question'){const q=await DB.prepare('SELECT * FROM questions WHERE id=?').bind(Number(u.searchParams.get('id'))).first();if(!q)return E('Soal tidak ditemukan.',404);return J({q:{id:q.id,cat:q.cat,theme:q.theme,text:nm(q.text),options:nj(q.options),answer:q.answer,weights:q.weights?JSON.parse(q.weights):null,explain:nm(q.explain||''),trick:nm(q.trick||'')}})}
   if(p=='/api/admin/settheme'){await DB.prepare('UPDATE questions SET theme=? WHERE id=?').bind(body.theme,body.id).run();return J({ok:1})}
   if(p=='/api/admin/delq'){await DB.prepare('DELETE FROM questions WHERE id=?').bind(body.id).run();return J({ok:1})}
   if(p=='/api/admin/import'){const qs=Array.isArray(body.qs)?body.qs:[],rows=qs.map(clean),bad=rows.findIndex(x=>!x);if(bad>=0)return E('Soal nomor '+(bad+1)+' tidak valid (cek cat, 5 opsi, answer 0-4 atau weights 5 angka 1-5). Tidak ada yang disimpan.');
