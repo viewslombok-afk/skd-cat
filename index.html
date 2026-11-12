@@ -342,5 +342,61 @@ M.TWK.s=[
 'KATA DEPAN DAN AWALAN: di- sebagai kata depan ditulis terpisah (di rumah, di sana). Di- sebagai awalan ditulis serangkai (dimakan, dibaca). Kata depan menunjukkan tempat; awalan menempel pada kata kerja.',
 'EJAAN: berlaku Ejaan Bahasa Indonesia (EBI), pengganti EYD dan PUEBI. Huruf kapital untuk awal kalimat, nama orang, nama geografi, nama bulan dan hari, serta gelar yang diikuti nama.'],k:'Periksa berurutan: subjek ada, kata mubazir, paralel, lalu kebakuan kata.'}
 ];
-addEventListener('hashchange',route);route();
-</script></body></html>
+/* ===================================================================
+   v3: header sticky, tampilan lebih bersih, info passing grade,
+   latihan (next/back, timer, posisi scroll), materi TIU
+   =================================================================== */
+document.head.insertAdjacentHTML('beforeend','<style>'+
+'body{font-size:15.5px;-webkit-tap-highlight-color:transparent}'+
+'header.hd{position:sticky;top:0;z-index:60;display:block;padding:8px 12px;box-shadow:0 2px 10px rgba(0,0,0,.28)}'+
+'.hd1{display:flex;align-items:center;gap:10px;min-height:40px}'+
+'.hd .back{margin:0;padding:0;width:38px;height:38px;border-radius:10px;font-size:20px;line-height:1;flex:0 0 auto}'+
+'.ttl{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.2}.ttl b{font-size:15px;letter-spacing:.4px}'+
+'.ttl span{font-size:12px;color:#bfdbfe;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+'.hd .tm{font-size:19px;background:rgba(255,255,255,.14);padding:4px 10px;border-radius:10px;color:#fde047;flex:0 0 auto}'+
+'.hd .tm.warn{color:#fca5a5;animation:bl 1s infinite}@keyframes bl{50%{opacity:.45}}'+
+'.hd nav{display:flex;flex-wrap:nowrap;gap:5px;margin-top:6px;overflow-x:auto;scrollbar-width:none}.hd nav::-webkit-scrollbar{display:none}'+
+'.hd nav a{flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;gap:4px;padding:7px 4px;font-size:12.5px;white-space:nowrap;border-radius:10px;cursor:pointer;color:#fff;background:rgba(255,255,255,.12);font-weight:600}'+
+'@media(max-width:520px){.hd nav a i{display:none}.hd nav a{font-size:13px}}'+
+'.hd nav a i{font-style:normal}.hd nav a.on{background:#fff;color:var(--p)}'+
+'main{padding:12px 12px calc(90px + env(safe-area-inset-bottom,0px))}'+
+'.card{border:1px solid var(--b);border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.06),0 4px 14px rgba(15,23,42,.05)}'+
+'.btn{min-height:44px;border-radius:10px;font-size:15px;transition:transform .12s,opacity .12s}.btn:active{transform:scale(.97)}.btn:disabled{opacity:.4;cursor:default}'+
+'.stat b{font-size:26px}'+
+'.opt{border-width:1.5px;padding:12px 14px;min-height:48px;line-height:1.45}.opt:not(:disabled):hover{border-color:var(--bl)}'+
+'.acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}'+
+'.pgb{margin-top:12px;display:grid;gap:6px}.pgl{display:flex;justify-content:space-between;gap:4px 10px;padding:9px 12px;border-radius:10px;background:var(--bg);font-size:14px;flex-wrap:wrap}'+
+'.pnv{display:flex;gap:6px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:thin}'+
+'.pn{flex:0 0 auto;width:36px;height:36px;border-radius:9px;border:1px solid var(--b);background:var(--g);color:var(--tx);font-weight:700;cursor:pointer;font-family:inherit}'+
+'.pn.cur{outline:3px solid #93c5fd}.pn.gok{background:#16a34a;color:#fff;border-color:#16a34a}.pn.gbad{background:#dc2626;color:#fff;border-color:#dc2626}.pn.gpart{background:#f59e0b;color:#111;border-color:#f59e0b}'+
+'.q .bar,.prc .bar{position:sticky;bottom:0;background:var(--c);padding:10px 0 calc(6px + env(safe-area-inset-bottom,0px));margin-top:12px;border-top:1px solid var(--b);z-index:5}'+
+'.th{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;margin-bottom:6px}.th small{opacity:.7;white-space:nowrap}'+
+'.pbar{height:4px;background:var(--g);border-radius:99px;overflow:hidden;margin:2px 0 10px}.pbar i{display:block;height:100%;background:var(--bl);transition:width 1s linear}'+
+'.lbl{display:block;font-weight:700;font-size:13px;margin:10px 0 2px}'+
+'.rc,#pg,#rf{scroll-margin-top:118px}'+
+'details summary{padding:2px 0}details[open]{background:rgba(37,99,235,.04)}'+
+'</style>');
+
+let HX='',LSY=0,RESTORE=false,THC=null,PL={c:'',t:''},PT=null;
+let PRT=0;try{PRT=+localStorage.getItem('prt')||0}catch(x){}
+const QNF={TWK:30,TIU:35,TKP:45};
+const mmss=s=>String(Math.max(0,s)/60|0).padStart(2,'0')+':'+String(Math.max(0,s)%60).padStart(2,'0');
+
+/* ---------- header sticky + navigasi ---------- */
+function shell(inner,adm){
+ const BK=adm?"V='dash';location.hash=''":({materi:"go('dash')",rank:"go('dash')",brief:"go('dash')",exam:"exitEx()",result:"go('dash')",latihan:"go('dash')"})[V]||'';
+ const ic={dash:'🏠',materi:'📚',latihan:'✍️',rank:'🏆'};
+ const n=(v,l)=>`<a class="${V==v?'on':''}" onclick="go('${v}')"><i>${ic[v]}</i>${l}</a>`;
+ const nav=cur&&!adm&&V!='exam'?`<nav>${n('dash','Dashboard')}${n('materi','Materi')}${n('latihan','Latihan')}${n('rank','Peringkat')}<a onclick="logout()"><i>🚪</i>Keluar</a></nav>`:'';
+ const hx=HX;HX='';
+ $('app').innerHTML=`<header class="hd"><div class="hd1">${BK?`<button class="back" onclick="${BK}" title="Kembali">${hx?'←':'←'}</button>`:''}<div class="ttl"><b>CAT SKD SIMULATOR</b><span>${adm?'Panel Pemilik':cur?'Halo, '+e(cur):'Silakan masuk'}</span></div>${hx}</div>${nav}</header><main>${inner}</main>`}
+function go(v){scrollTo(0,0);V=v;route()}
+
+/* ---------- info passing grade ---------- */
+const needSoal=c=>Math.ceil(PG[c]*QNF[c]/FULL[c]);
+function pgBox(h){const S={TWK:h.tw,TIU:h.ti,TKP:h.tk};
+ return `<div class="pgb">${['TWK','TIU','TKP'].map(c=>{const s=S[c],g=PG[c]-s;
+  const msg=g<=0?`<span class="ok">✓ Lulus${g<0?', lebih '+(-g)+' poin':' (tepat di batas)'}</span>`:c=='TKP'?`<span class="no">Kurang <b>${g}</b> poin lagi</span>`:`<span class="no">Kurang ${g} poin = <b>${Math.ceil(g/5)} soal benar lagi</b></span>`;
+  return `<div class="pgl"><span><b>${c}</b> ${s} / min ${PG[c]}</span>${msg}</div>`}).join('')}</div>`}
+function targetHTML(){const a=needSoal('TWK'),b=needSoal('TIU');
+ return `<div class="card"><h3>🎯 Syarat Lulus Passing Grade</h3><p class="mu" style="margin:0">Ketiga bagian wajib terpenuhi sekaligus.</p><div class="pgb"><div class="pgl"><span><b>TWK</b> min ${PG.TWK}</span><span>minimal <b>${a} soal benar</b> dari ${QNF.TWK} (salah maks ${QNF.TWK-a})</span></div><div class="pgl"><span><b>TIU</b> min ${PG.TI
