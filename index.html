@@ -23,7 +23,12 @@ h2,h3{margin:0 0 10px}input,select,textarea{width:100%;padding:10px;margin:4px 0
 .sc{overflow-x:auto}table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1px solid var(--b);text-align:left;font-size:14px}
 .bar{display:flex;justify-content:space-between;gap:8px;margin-top:14px}
 </style></head><body>
-<div id="app"></div>
+<div id="app"><div id="boot" style="font:16px sans-serif;padding:40px 16px;text-align:center;color:#9ca3af">Memuat aplikasi…<br><small id="bootmsg"></small></div></div>
+<script>
+window.__errs=[];addEventListener('error',function(e){window.__errs.push(e.message+' @'+(e.lineno||'?'));var m=document.getElementById('bootmsg');if(m)m.textContent='Error: '+window.__errs.join(' | ')});
+addEventListener('unhandledrejection',function(e){var m=document.getElementById('bootmsg');window.__errs.push(String(e.reason&&e.reason.message||e.reason));if(m)m.textContent='Error: '+window.__errs.join(' | ')});
+setTimeout(function(){var b=document.getElementById('boot');if(b){b.innerHTML='Aplikasi gagal dimuat.<br><small>'+(window.__errs.join(' | ')||'Script tidak berjalan. Coba Muat Ulang atau buka di browser lain.')+'</small><br><br><button onclick="location.reload()" style="padding:10px 18px;font-size:16px">Muat Ulang</button>'}},6000);
+</script>
 <script>
 const FULL={TWK:150,TIU:175,TKP:225},PG={TWK:65,TIU:80,TKP:156}; // sesuaikan passing grade dengan aturan terbaru
 const L=k=>{try{return JSON.parse(localStorage.getItem(k))}catch(x){return null}},S=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(x){}};
@@ -393,10 +398,4 @@ function shell(inner,adm){
 function go(v){scrollTo(0,0);V=v;route()}
 
 /* ---------- info passing grade ---------- */
-const needSoal=c=>Math.ceil(PG[c]*QNF[c]/FULL[c]);
-function pgBox(h){const S={TWK:h.tw,TIU:h.ti,TKP:h.tk};
- return `<div class="pgb">${['TWK','TIU','TKP'].map(c=>{const s=S[c],g=PG[c]-s;
-  const msg=g<=0?`<span class="ok">✓ Lulus${g<0?', lebih '+(-g)+' poin':' (tepat di batas)'}</span>`:c=='TKP'?`<span class="no">Kurang <b>${g}</b> poin lagi</span>`:`<span class="no">Kurang ${g} poin = <b>${Math.ceil(g/5)} soal benar lagi</b></span>`;
-  return `<div class="pgl"><span><b>${c}</b> ${s} / min ${PG[c]}</span>${msg}</div>`}).join('')}</div>`}
-function targetHTML(){const a=needSoal('TWK'),b=needSoal('TIU');
- return `<div class="card"><h3>🎯 Syarat Lulus Passing Grade</h3><p class="mu" style="margin:0">Ketiga bagian wajib terpenuhi sekaligus.</p><div class="pgb"><div class="pgl"><span><b>TWK</b> min ${PG.TWK}</span><span>minimal <b>${a} soal benar</b> dari ${QNF.TWK} (salah maks ${QNF.TWK-a})</span></div><div class="pgl"><span><b>TIU</b> min ${PG.TI
+const needSoal=c=>Math.ceil(PG[c]*QN
