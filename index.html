@@ -27,7 +27,9 @@ h2,h3{margin:0 0 10px}input,select,textarea{width:100%;padding:10px;margin:4px 0
 <script>
 window.__errs=[];addEventListener('error',function(e){window.__errs.push(e.message+' @'+(e.lineno||'?'));var m=document.getElementById('bootmsg');if(m)m.textContent='Error: '+window.__errs.join(' | ')});
 addEventListener('unhandledrejection',function(e){var m=document.getElementById('bootmsg');window.__errs.push(String(e.reason&&e.reason.message||e.reason));if(m)m.textContent='Error: '+window.__errs.join(' | ')});
-setTimeout(function(){var b=document.getElementById('boot');if(b){b.innerHTML='Aplikasi gagal dimuat.<br><small>'+(window.__errs.join(' | ')||'Script tidak berjalan. Coba Muat Ulang atau buka di browser lain.')+'</small><br><br><button onclick="location.reload()" style="padding:10px 18px;font-size:16px">Muat Ulang</button>'}},6000);
+window.__lg=['halaman dibuka'];window.__log=function(m){window.__lg.push(m)};
+(function(){var F=window.fetch;window.fetch=function(u,o){__log('minta '+u);var c=new AbortController(),t=setTimeout(function(){c.abort()},15000);o=Object.assign({},o||{},{signal:c.signal});return F.call(window,u,o).then(function(r){clearTimeout(t);__log(u+' = '+r.status);return r},function(e){clearTimeout(t);__log(u+' gagal: '+(e&&e.name));throw e})}})();
+setTimeout(function(){var b=document.getElementById('boot');if(b){b.innerHTML='Aplikasi gagal dimuat.<br><small>'+(window.__errs.join(' | ')||'Tidak ada error.')+'<br>Catatan: '+window.__lg.join(' → ')+'</small><br><br><button onclick="location.reload()" style="padding:10px 18px;font-size:16px">Muat Ulang</button>'}},6000);
 </script>
 <script>
 const FULL={TWK:150,TIU:175,TKP:225},PG={TWK:65,TIU:80,TKP:156}; // sesuaikan passing grade dengan aturan terbaru
@@ -394,8 +396,4 @@ function shell(inner,adm){
  const n=(v,l)=>`<a class="${V==v?'on':''}" onclick="go('${v}')"><i>${ic[v]}</i>${l}</a>`;
  const nav=cur&&!adm&&V!='exam'?`<nav>${n('dash','Dashboard')}${n('materi','Materi')}${n('latihan','Latihan')}${n('rank','Peringkat')}<a onclick="logout()"><i>🚪</i>Keluar</a></nav>`:'';
  const hx=HX;HX='';
- $('app').innerHTML=`<header class="hd"><div class="hd1">${BK?`<button class="back" onclick="${BK}" title="Kembali">${hx?'←':'←'}</button>`:''}<div class="ttl"><b>CAT SKD SIMULATOR</b><span>${adm?'Panel Pemilik':cur?'Halo, '+e(cur):'Silakan masuk'}</span></div>${hx}</div>${nav}</header><main>${inner}</main>`}
-function go(v){scrollTo(0,0);V=v;route()}
-
-/* ---------- info passing grade ---------- */
-const needSoal=c=>Math.ceil(PG[c]*QN
+ $('app')
