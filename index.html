@@ -31,7 +31,7 @@ window.__lg=['halaman dibuka'];window.__log=function(m){window.__lg.push(m)};
 (function(){var F=window.fetch;window.fetch=function(u,o){__log('minta '+u);var c=new AbortController(),t=setTimeout(function(){c.abort()},15000);o=Object.assign({},o||{},{signal:c.signal});return F.call(window,u,o).then(function(r){clearTimeout(t);__log(u+' = '+r.status);return r},function(e){clearTimeout(t);__log(u+' gagal: '+(e&&e.name));throw e})}})();
 setTimeout(function(){var b=document.getElementById('boot');if(b){b.innerHTML='Aplikasi gagal dimuat.<br><small>'+(window.__errs.join(' | ')||'Tidak ada error.')+'<br>Catatan: '+window.__lg.join(' → ')+'</small><br><br><button onclick="location.reload()" style="padding:10px 18px;font-size:16px">Muat Ulang</button>'}},6000);
 </script>
-<script src="app1.js?v=1"></script>
-<script src="app2.js?v=1"></script>
-<script src="app3.js?v=1"></script>
+<script src="app1.js?v=2"></script>
+<script src="app2.js?v=2"></script>
+<script src="app3.js?v=2"></script>
 </body></html>
